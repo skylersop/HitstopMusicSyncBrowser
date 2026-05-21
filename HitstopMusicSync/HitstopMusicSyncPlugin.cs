@@ -22,28 +22,39 @@ public class hitstopmusicsync : BaseUnityPlugin
 }
 
 
-public static class SpotifyMuter
+public static class BrowserMuter
 {
     private static float previousVolume = -1f;
     private static bool isMuted = false;
 
+    // CHANGE THIS if you use a different browser: "msedge", "firefox", "opera"
+    private static readonly string TargetBrowser = "firefox"; 
+
     public static void Toggle()
     {
-        var spotifyProcess = Process.GetProcessesByName("Spotify").FirstOrDefault();
-        if (spotifyProcess == null) { 
+        // 1. Find all running instances of your browser
+        var browserProcesses = Process.GetProcessesByName(TargetBrowser);
+        if (browserProcesses.Length == 0) { 
             var logSource = Logger.CreateLogSource("HitstopMusicSync");
-            logSource.LogError("Spotify not found! Is it open?");
+            logSource.LogError($"{TargetBrowser} not found! Is it open?");
             return;
         }
 
+        // Create a list of all process IDs for the browser
+        var browserIds = browserProcesses.Select(p => p.Id).ToList();
+
+        // 2. Access the Windows Audio Mixer
         var enumerator = new MMDeviceEnumerator();
         var sessions = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
                                  .AudioSessionManager.Sessions;
 
+        // 3. Loop through Windows audio sessions
         for (int i = 0; i < sessions.Count; i++)
         {
             var session = sessions[i];
-            if (session.GetProcessID == spotifyProcess.Id)
+            
+            // Check if this audio session belongs to ANY of our browser processes
+            if (browserIds.Contains((int)session.GetProcessID))
             {
                 if (!isMuted)
                 {
@@ -53,10 +64,11 @@ public static class SpotifyMuter
                 }
                 else
                 {
+                    // Restore the browser volume
                     session.SimpleAudioVolume.Volume = previousVolume;
                     isMuted = false;
                 }
-                break;
+                // We don't break; here because browsers often run multiple audio sessions
             }
         }
     }
